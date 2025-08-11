@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 // Укажи домен своего туннеля (subdomain.loca.lt / *.trycloudflare.com / *.ngrok.io|app)
 // Можно передавать через переменную окружения TUNNEL_HOST, чтобы не править файл каждый раз.
-const TUNNEL_HOST = process.env.TUNNEL_HOST || "spicy-nails-invite.loca.lt"; // ← замени при необходимости
+const TUNNEL_HOST = process.env.TUNNEL_HOST || "spicy-nails-invite.loca.lt"; // замени при необходимости
 
 // Разрешим популярные домены туннелей сразу (чтоб не менять каждый раз)
 const allowed = [
