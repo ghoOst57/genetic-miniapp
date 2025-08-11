@@ -1,34 +1,3 @@
-FastAPI Backend for Telegram Mini App — Genetic Doctor (Render‑friendly)
-
-✔ Готов к деплою на Render:
-  - SQLite с безопасным путём: использует /data при наличии диска, иначе /tmp
-  - Стартовая команда: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-  - CORS: настраивается через переменную окружения ALLOW_ORIGINS (список через запятую), по умолчанию "*"
-
-✔ Совместим с фронтом:
-  - GET  /doctor                      → профиль
-  - GET  /awards                      → награды
-  - GET  /reviews                     → изображения отзывов (скриншоты)
-  - GET  /availability?from_date=&to_date=&format=any|online|offline
-       принимает даты в формате YYYY-MM-DD или ISO (берёт .date())
-       отдаёт: [{id, start_utc, end_utc, format}]
-  - POST /booking { availability_id, contact?, note?, name? }
-       → { booking_id, start_utc, end_utc } (60 минут)
-  - GET  /health
-
-✔ Дополнительно:
-  - /auth/verify — проверка Telegram WebApp initData (если задан BOT_TOKEN)
-  - Устранены прошлые ошибки порядка объявления Base/моделей и распаковки slot id
-
-Запуск локально:
-  python main.py
-
-Деплой на Render:
-  Build:  pip install -r requirements.txt
-  Start:  uvicorn main:app --host 0.0.0.0 --port $PORT
-  (рекомендуется) Disks → Add Disk (1–2 GB), Mount Path: /data
-"""
-
 from __future__ import annotations
 
 import hashlib
