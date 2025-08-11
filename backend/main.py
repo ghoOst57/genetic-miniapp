@@ -63,9 +63,24 @@ app.add_middleware(
 )
 
 # ===================== DB (SQLite) =====================
-Base = declarative_base()
-engine = create_engine("sqlite:////data/genetic.db", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+from sqlalchemy import create_engine
+import os, pathlib
+
+def pick_writable_dir():
+    for candidate in ["/data", "/var/data", "/tmp", os.getcwd()]:
+        try:
+            pathlib.Path(candidate).mkdir(parents=True, exist_ok=True)
+            if os.access(candidate, os.W_OK):
+                return candidate
+        except Exception:
+            continue
+    return os.getcwd()
+
+DB_DIR = pick_writable_dir()  # на Render без диска это будет /tmp
+DB_PATH = os.path.join(DB_DIR, "genetic.db")
+DB_URL  = f"sqlite:///{DB_PATH}"  # абсолютный путь -> 'sqlite:////...'
+
+engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
 
 
 class Booking(Base):
