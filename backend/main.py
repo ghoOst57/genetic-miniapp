@@ -107,8 +107,7 @@ def verify_init_data(init_data: str, bot_token: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="hash is missing")
 
     # data-check-string
-    data_check_string = "
-".join(f"{k}={kv[k]}" for k in sorted(kv.keys()))
+    data_check_string = "\n".join(f"{k}={kv[k]}" for k in sorted(kv.keys()))
 
     secret_key = hmac.new("WebAppData".encode(), bot_token.encode(), hashlib.sha256).digest()
     calc_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
