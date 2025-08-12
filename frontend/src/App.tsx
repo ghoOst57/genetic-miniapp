@@ -23,6 +23,15 @@ const MAX_W = "max-w-[360px]"; // компактная ширина под Teleg
 const DOC_DISPLAY_NAME = "Андреева Наталия Игоревна";
 const DOCTOR_PHOTO = "/doctor.jpg";
 
+const LOCAL_AWARDS = [
+  "/awards/award1.jpg",
+  "/awards/award2.jpg",
+  "/awards/award3.jpg",
+  "/awards/award4.jpg",
+  "/awards/award5.jpg",
+  "/awards/award6.jpg",
+];
+
 /** ==== Типы ==== */
 type Format = "online" | "offline";
 type Slot = {
@@ -322,7 +331,7 @@ END:VCALENDAR`;
             {[
               ["profile", "О враче"],
               ["book", "Запись"],
-              ["awards", "Награды"],
+              ["awards", "Дипломы/награды"],
               ["reviews", "Отзывы"],
             ].map(([k, l]) => (
               <button
@@ -393,19 +402,29 @@ END:VCALENDAR`;
               пренатальная и предиктивная генетика, наследственные синдромы. Работа с семейными
               рисками, составление генеалогического древа, рекомендации по скринингам.
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-                <div className="text-[12px] opacity-70">Образование</div>
-                <div className="text-[13px] font-medium">
-                  РНИМУ им. Пирогова (2012) • Ординатура по мед. генетике (2014)
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-                <div className="text-[12px] opacity-70">Сертификаты</div>
-                <div className="text-[13px] font-medium">Клиническая генетика • Пренатальная диагностика</div>
-              </div>
-            </div>
-          </Section>
+           <div className="mt-3 grid grid-cols-1 gap-2">
+  {/* Образование */}
+  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
+    <div className="text-[12px] opacity-70">Образование</div>
+    <div className="mt-1 text-[13px] font-medium space-y-1.5">
+      <p>
+        Медицинский институт Орловского государственного университета им. И.С. Тургенева,
+        лечебное дело (2018)
+      </p>
+      <p>
+        Медико-генетический научный центр, ординатура по генетике (2021)
+      </p>
+    </div>
+  </div>
+
+  {/* Повышение квалификации */}
+  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
+    <div className="text-[12px] opacity-70">Повышение квалификации</div>
+    <div className="mt-1 text-[13px] font-medium">
+      Школа анализа NGS данных «MGNGS School'22» (2022)
+    </div>
+  </div>
+</div>
 
           {/* Направления и услуги */}
           <Section className={`${MAX_W} mx-auto`}>
@@ -508,23 +527,23 @@ END:VCALENDAR`;
 
       {/* Награды */}
       {tab === "awards" && (
-        <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
-          {awards.map((a) => (
-            <figure
-              key={a.id}
-              className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
-            >
-              <img src={a.image_url} alt={a.title} className="w-full h-28 object-cover" />
-              <figcaption className="p-2">
-                <div className="text-[13px] font-medium line-clamp-2">{a.title}</div>
-                <div className="text-[11px] opacity-70">
-                  {a.issuer} · {a.date}
-                </div>
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-      )}
+  <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
+    {LOCAL_AWARDS.map((src, i) => (
+      <figure
+        key={src}
+        className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
+      >
+        <img
+          src={src}
+          alt={`Диплом/награда ${i + 1}`}
+          className="w-full h-40 object-cover"
+          loading="lazy"
+          decoding="async"
+        />
+      </figure>
+    ))}
+  </div>
+)}
 
       {/* Отзывы (скриншоты) */}
       {tab === "reviews" && (
