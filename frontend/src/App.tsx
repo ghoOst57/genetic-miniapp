@@ -344,7 +344,7 @@ END:VCALENDAR`;
             <img
   src={DOCTOR_PHOTO}
   alt=""
-  className="w-full h-48 object-cover object-[50%_18%] mix-blend-soft-light"
+  className="w-full h-48 object-cover object-[50%_10%] mix-blend-soft-light"
 />
 
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.25),transparent_40%)]" />
