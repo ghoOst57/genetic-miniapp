@@ -8,6 +8,7 @@ const API_BASE =
 /** ==== Константы UI ==== */
 const MAX_W = "max-w-[360px]"; // компактная ширина под Telegram (делает «уже»)
 const DOC_DISPLAY_NAME = "Андреева Наталия Игоревна";
+const DOCTOR_PHOTO = "/doctor.jpg";
 
 /** ==== Типы ==== */
 type Format = "online" | "offline";
@@ -340,25 +341,20 @@ END:VCALENDAR`;
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-90" />
-              <img
-                src={
-                  doctor?.photo_url ||
-                  "https://images.unsplash.com/photo-1550831107-1553da8c8464?q=80&w=800&auto=format&fit=crop"
-                }
-                className="w-full h-40 object-cover mix-blend-soft-light"
-                alt=""
-              />
+             <img
+  src={DOCTOR_PHOTO}
+  className="w-full h-40 object-cover mix-blend-soft-light"
+  alt=""
+/>
+
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.25),transparent_40%)]" />
               <div className="relative p-4 text-white">
                 <div className="flex items-center gap-3">
                   <img
-                    src={
-                      doctor?.photo_url ||
-                      "https://images.unsplash.com/photo-1550831107-1553da8c8464?q=80&w=800&auto=format&fit=crop"
-                    }
-                    className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
-                    alt=""
-                  />
+  src={DOCTOR_PHOTO}
+  className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
+  alt=""
+/>
                   <div className="min-w-0">
                     <div className="text-[16px] font-semibold leading-tight">{DOC_DISPLAY_NAME}</div>
                     <div className="text-[12.5px] opacity-90">
