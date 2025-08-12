@@ -235,6 +235,7 @@ class AvailabilityAliasOut(BaseModel):
     start_utc: str
     end_utc: str
     format: Literal["online", "offline"]
+    is_booked: bool = False
 
 
 def _parse_date_param(s: str) -> datetime:
@@ -260,29 +261,42 @@ def get_availability_alias(
     start_day_utc = _parse_date_param(from_date)
     end_day_utc = _parse_date_param(to_date)
 
+    # 👉 добавляем блок получения занятых слотов из БД в диапазоне
+    db = SessionLocal()
+    try:
+        q_start = start_day_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        q_end = end_day_utc.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        rows = db.query(Booking.availability_id)\
+                 .filter(Booking.start_utc >= q_start, Booking.start_utc < q_end)\
+                 .all()
+        booked_ids = {r[0] for r in rows}
+    finally:
+        db.close()
+
     slots: List[AvailabilityAliasOut] = []
     day = start_day_utc
     while day.date() <= end_day_utc.date():
-        msk_day = day + MSK_OFFSET  # переводим utc→msk для логики будни/выходные
-        if msk_day.weekday() < 5:  # Пн‑Пт
+        msk_day = day + MSK_OFFSET
+        if msk_day.weekday() < 5:
             for hour in range(10, 18):
                 if hour in (12, 15):
                     continue
-                # Начало слота в МСК → переводим в UTC
                 start_msk = datetime(msk_day.year, msk_day.month, msk_day.day, hour, 0, 0, tzinfo=timezone.utc) - MSK_OFFSET
                 end_msk = start_msk + timedelta(hours=1)
                 f = "online" if (hour % 2 == 0) else "offline"
                 if format != "any" and f != format:
                     continue
-                slot_id = f"{start_msk.date()}-{hour:02d}-{f}"  # YYYY-MM-DD-HH-format (UTC‑дата)
+                slot_id = f"{start_msk.date()}-{hour:02d}-{f}"
                 slots.append(AvailabilityAliasOut(
                     id=slot_id,
-                    start_utc=start_msk.isoformat().replace("+00:00", "Z"),
-                    end_utc=end_msk.isoformat().replace("+00:00", "Z"),
+                    start_utc=start_msk.isoformat().replace("+00:00","Z"),
+                    end_utc=end_msk.isoformat().replace("+00:00","Z"),
                     format=f,
+                    is_booked=(slot_id in booked_ids),     # ← помечаем занятость
                 ))
         day = (day + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return slots
+
 
 
 # ===================== BOOKING =====================
