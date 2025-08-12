@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ??????? ??? Telegram */
+/* Небольшие глобальные штрихи под Telegram */
 html { font-size: 14px; }
 body {
   background: var(--tg-theme-bg-color, #f6f7f9);
@@ -11,9 +11,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 * { -webkit-tap-highlight-color: transparent; }
+
 :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
 .safe-bottom { padding-bottom: calc(var(--safe-bottom) + 72px); }
+
 .fade-in { animation: fade-in .18s ease-out both; }
-@keyframes fade-in { from {opacity:0; transform:translateY(4px);} to {opacity:1; transform:none;} }
-.no-scrollbar::-webkit-scrollbar { display: none; }
+@keyframes fade-in { from {opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
+
+.no-scrollbar::-webkit-scrollbar { display:none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
