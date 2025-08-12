@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "esbuild": "^0.24.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "rollup": "^4.24.0"
@@ -33,6 +34,7 @@
     "node": "20.x"
   },
   "optionalDependencies": {
+    "@esbuild/linux-x64": "^0.24.0",
     "@rollup/rollup-linux-x64-gnu": "^4.24.0"
   },
   "postcss": "{plugins:{tailwindcss:{},autoprefixer:{}}}"
