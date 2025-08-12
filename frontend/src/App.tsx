@@ -1,6 +1,19 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 
+// простая диагностика: покажем алерт, если что-то упадёт на старом вебвью
+if (typeof window !== 'undefined') {
+  const showOnce = (msg: string) => {
+    const w: any = window;
+    if (w.__miniapp_err) return;
+    w.__miniapp_err = true;
+    try { (window as any).Telegram?.WebApp?.showAlert?.(msg); } catch {}
+  };
+  window.addEventListener('error', (e) => showOnce(`Ошибка загрузки: ${e.message || ''}`));
+  window.addEventListener('unhandledrejection', (e: any) => showOnce(`Ошибка: ${e?.reason?.message || 'Неизвестная'}`));
+}
+
+
 /** ==== API base (Vercel env или window.__API_BASE__) ==== */
 const API_BASE =
   (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
