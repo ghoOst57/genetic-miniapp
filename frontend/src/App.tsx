@@ -6,7 +6,7 @@ const API_BASE =
   (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
 
 /** ==== Константы UI ==== */
-const MAX_W = "max-w-[400px]"; // компактная ширина под Telegram (делает «уже»)
+const MAX_W = "max-w-[360px]"; // компактная ширина под Telegram (делает «уже»)
 const DOC_DISPLAY_NAME = "Андреева Наталия Игоревна";
 
 /** ==== Типы ==== */
