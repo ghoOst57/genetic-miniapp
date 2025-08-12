@@ -1,28 +1,15 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from "react";
 
-// простая диагностика: покажем алерт, если что-то упадёт на старом вебвью
-if (typeof window !== 'undefined') {
-  const showOnce = (msg: string) => {
-    const w: any = window;
-    if (w.__miniapp_err) return;
-    w.__miniapp_err = true;
-    try { (window as any).Telegram?.WebApp?.showAlert?.(msg); } catch {}
-  };
-  window.addEventListener('error', (e) => showOnce(`Ошибка загрузки: ${e.message || ''}`));
-  window.addEventListener('unhandledrejection', (e: any) => showOnce(`Ошибка: ${e?.reason?.message || 'Неизвестная'}`));
-}
+/** ==== БАЗА API (Vercel env или window.__API_BASE__) ==== */
+const API_BASE = (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
 
-
-/** ==== API base (Vercel env или window.__API_BASE__) ==== */
-const API_BASE =
-  (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
-
-/** ==== Константы UI ==== */
-const MAX_W = "max-w-[360px]"; // компактная ширина под Telegram (делает «уже»)
+/** ==== КОНСТАНТЫ UI ==== */
+const MAX_W = "max-w-[360px]"; // компактная ширина под Telegram
 const DOC_DISPLAY_NAME = "Андреева Наталия Игоревна";
-const DOCTOR_PHOTO = "/doctor.jpg";
+const DOCTOR_PHOTO = "/doctor.jpg?v=2";
 
+// Локальные изображения дипломов/наград из public/awards/
 const LOCAL_AWARDS = [
   "/awards/award1.jpg",
   "/awards/award2.jpg",
@@ -32,24 +19,9 @@ const LOCAL_AWARDS = [
   "/awards/award6.jpg",
 ];
 
-/** ==== Типы ==== */
+/** ==== ТИПЫ ==== */
 type Format = "online" | "offline";
-type Slot = {
-  id: string;
-  start_utc: string;
-  end_utc: string;
-  format: Format;
-  is_booked?: boolean; // если бэкенд ещё не обновлён — undefined (считаем свободным)
-};
-type Award = {
-  id: string;
-  type: string;
-  title: string;
-  issuer: string;
-  date: string;
-  image_url: string;
-  description?: string;
-};
+type Slot = { id: string; start_utc: string; end_utc: string; format: Format; is_booked?: boolean };
 type ReviewAsset = { id: string; image_url: string; source?: string; date?: string; caption?: string };
 type Doctor = {
   id: string;
@@ -63,7 +35,7 @@ type Doctor = {
   bio: string;
 };
 
-/** ==== Хелперы ==== */
+/** ==== ХЕЛПЕРЫ ==== */
 const toYMD = (d: Date) => d.toISOString().slice(0, 10);
 const fmtTimeMSK = (iso: string) =>
   new Intl.DateTimeFormat("ru-RU", {
@@ -73,7 +45,7 @@ const fmtTimeMSK = (iso: string) =>
     timeZone: "Europe/Moscow",
   }).format(new Date(iso));
 
-/** ==== Мини-компоненты ==== */
+/** ==== МИКРОКОМПОНЕНТЫ ==== */
 const Section = ({
   children,
   className = "",
@@ -93,9 +65,7 @@ const Section = ({
 );
 
 const Badge = ({ children }: { children: React.ReactNode }) => (
-  <span className="px-2 py-1 rounded-full text-[11px] bg-black/5 dark:bg-white/10">
-    {children}
-  </span>
+  <span className="px-2 py-1 rounded-full text-[11px] bg-black/5 dark:bg-white/10">{children}</span>
 );
 
 /** ==== Полоса дней ==== */
@@ -149,7 +119,7 @@ function DayStrip({
   );
 }
 
-/** ==== Вертикальный список слотов (зелёный/красный) ==== */
+/** ==== Вертикальный список слотов ==== */
 function SlotsList({
   slots,
   selected,
@@ -173,8 +143,7 @@ function SlotsList({
         const busy = !!s.is_booked;
         const active = selected === s.id && !busy;
 
-        const base =
-          "w-full h-10 rounded-xl border text-sm font-medium transition flex items-center justify-between px-3";
+        const base = "w-full h-10 rounded-xl border text-sm font-medium transition flex items-center justify-between px-3";
         const clsBusy = "bg-[#ef4444] text-white border-[#ef4444] cursor-not-allowed";
         const clsActive = "bg-[#10b981] text-white border-[#10b981]";
         const clsIdle =
@@ -196,7 +165,7 @@ function SlotsList({
   );
 }
 
-/** ==== Главный компонент ==== */
+/** ==== ГЛАВНЫЙ КОМПОНЕНТ ==== */
 export default function App() {
   const tg = (window as any).Telegram?.WebApp;
 
@@ -205,7 +174,6 @@ export default function App() {
 
   // Данные
   const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [awards, setAwards] = useState<Award[]>([]);
   const [reviews, setReviews] = useState<ReviewAsset[]>([]);
 
   // Расписание
@@ -225,7 +193,7 @@ export default function App() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  /** Telegram webapp init + тема */
+  /** Telegram init */
   useEffect(() => {
     try {
       tg?.ready?.();
@@ -234,14 +202,17 @@ export default function App() {
     } catch {}
   }, [tg]);
 
-  /** Загрузка статических данных */
+  /** Загрузка: профиль сразу, отзывы при открытии вкладки */
   useEffect(() => {
     fetch(`${API_BASE}/doctor`).then((r) => r.json()).then(setDoctor).catch(() => {});
-    fetch(`${API_BASE}/awards`).then((r) => r.json()).then(setAwards).catch(() => {});
-    fetch(`${API_BASE}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (tab === "reviews" && reviews.length === 0) {
+      fetch(`${API_BASE}/reviews`).then((r) => r.json()).then(setReviews).catch(() => {});
+    }
+  }, [tab, reviews.length]);
 
-  /** Загрузка слотов (под выбранный день и формат) */
+  /** Загрузка слотов (по дню/формату) — только на вкладке «Запись» */
   const loadDay = (iso: string, fmt: "any" | Format) => {
     const from = iso;
     const to = iso;
@@ -255,10 +226,13 @@ export default function App() {
       .catch(() => setSlots([]));
   };
   useEffect(() => {
-    loadDay(activeDate, format);
-  }, [activeDate, format]);
+    if (tab === "book") {
+      loadDay(activeDate, format);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, activeDate, format]);
 
-  /** Кнопка «Записаться» */
+  /** Создание брони */
   const onBook = async () => {
     const selected = slots.find((s) => s.id === selectedSlot);
     if (!selected) {
@@ -284,7 +258,7 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
 
-      // Скачиваем .ics
+      // .ics
       const fmt = (s: string) => s.replace(/[-:]/g, "").replace(".000Z", "Z");
       const ics = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -307,20 +281,19 @@ END:VCALENDAR`;
       setTimeout(() => URL.revokeObjectURL(url), 1500);
 
       tg?.showAlert?.("Запись подтверждена!");
-      // обновим список, чтобы слот стал «занято»
       loadDay(activeDate, format);
       setSelectedSlot("");
       setName("");
       setPhone("");
       setNote("");
-    } catch (e) {
+    } catch {
       tg?.showAlert?.("Не удалось создать запись. Попробуйте другой слот.");
     } finally {
       setBusy(false);
     }
   };
 
-  /** UI */
+  /** ===== RENDER ===== */
   return (
     <div className="min-h-[100svh] text-[color:var(--tg-theme-text-color,#111827)] overflow-x-hidden bg-[linear-gradient(180deg,rgba(20,184,166,.10)_0%,rgba(59,130,246,.06)_30%,transparent_70%)]">
       {/* Хедер + табы */}
@@ -331,26 +304,24 @@ END:VCALENDAR`;
             {[
               ["profile", "О враче"],
               ["book", "Запись"],
-              ["awards", "Дипломы/награды"],
+              ["awards", "Дипломы/награды"], // переименовано
               ["reviews", "Отзывы"],
             ].map(([k, l]) => (
               <button
-  key={k}
-  onClick={() => setTab(k as any)}
-  className={
-    [
-      // компактнее и без переноса
-      "px-2 h-8 rounded-md text-[12px] leading-none whitespace-nowrap",
-      "min-w-[72px] font-medium transition",
-      // активный / неактивный
-      tab === k
-        ? "bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] shadow"
-        : "text-[color:var(--tg-theme-text-color,#111827)]/90 hover:opacity-90",
-    ].join(" ")
-  }
->
-  {l}
-</button>
+                key={k}
+                onClick={() => setTab(k as any)}
+                className={
+                  [
+                    "px-2 h-8 rounded-md text-[12px] leading-none whitespace-nowrap",
+                    "min-w-[72px] font-medium transition",
+                    tab === k
+                      ? "bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] shadow"
+                      : "text-[color:var(--tg-theme-text-color,#111827)]/90 hover:opacity-90",
+                  ].join(" ")
+                }
+              >
+                {l}
+              </button>
             ))}
           </div>
         </div>
@@ -359,24 +330,26 @@ END:VCALENDAR`;
       {/* ПРОФИЛЬ */}
       {tab === "profile" && (
         <div className="fade-in">
-          {/* Hero-карточка с градиентом */}
+          {/* HERO */}
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-90" />
-            <img
-  src={DOCTOR_PHOTO}
-  alt=""
-  className="w-full h-48 object-cover object-[50%_10%] mix-blend-soft-light"
-/>
-
+              <img
+                src={DOCTOR_PHOTO}
+                alt=""
+                className="w-full h-48 object-cover mix-blend-soft-light"
+                style={{ objectPosition: "50% 18%" }}
+                loading="eager"
+                decoding="async"
+              />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.25),transparent_40%)]" />
               <div className="relative p-4 text-white">
                 <div className="flex items-center gap-3">
                   <img
-  src={DOCTOR_PHOTO}
-  className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
-  alt=""
-/>
+                    src={DOCTOR_PHOTO}
+                    className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
+                    alt=""
+                  />
                   <div className="min-w-0">
                     <div className="text-[16px] font-semibold leading-tight">{DOC_DISPLAY_NAME}</div>
                     <div className="text-[12.5px] opacity-90">
@@ -386,15 +359,18 @@ END:VCALENDAR`;
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge>🧬 {doctor?.years_experience || 12} лет практики</Badge>
-                  <Badge>🌍 Языки: {(doctor?.languages || ["ru","en"]).join(", ")}</Badge>
+                  <Badge>🌍 Языки: {(doctor?.languages || ["ru", "en"]).join(", ")}</Badge>
                   <Badge>🗓️ Длительность: 60 мин</Badge>
-                  <Badge>💬 {doctor?.formats?.includes("online") ? "Онлайн" : ""}{doctor?.formats?.includes("offline") ? " · Офлайн" : ""}</Badge>
+                  <Badge>
+                    💬 {(doctor?.formats || ["online", "offline"]).includes("online") ? "Онлайн" : ""}
+                    {(doctor?.formats || ["online", "offline"]).includes("offline") ? " · Офлайн" : ""}
+                  </Badge>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Подробнее о враче */}
+          {/* О специалисте */}
           <Section className={`${MAX_W} mx-auto`}>
             <h2 className="text-[15px] font-semibold mb-2">О специалисте</h2>
             <p className="text-[13px] leading-relaxed">
@@ -402,31 +378,29 @@ END:VCALENDAR`;
               пренатальная и предиктивная генетика, наследственные синдромы. Работа с семейными
               рисками, составление генеалогического древа, рекомендации по скринингам.
             </p>
-           <div className="mt-3 grid grid-cols-1 gap-2">
-  {/* Образование */}
-  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-    <div className="text-[12px] opacity-70">Образование</div>
-    <div className="mt-1 text-[13px] font-medium space-y-1.5">
-      <p>
-        Медицинский институт Орловского государственного университета им. И.С. Тургенева,
-        лечебное дело (2018)
-      </p>
-      <p>
-        Медико-генетический научный центр, ординатура по генетике (2021)
-      </p>
-    </div>
-  </div>
 
-  {/* Повышение квалификации */}
-  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-    <div className="text-[12px] opacity-70">Повышение квалификации</div>
-    <div className="mt-1 text-[13px] font-medium">
-      Школа анализа NGS данных «MGNGS School'22» (2022)
-    </div>
-  </div>
-</div>
+            <div className="mt-3 grid grid-cols-1 gap-2">
+              {/* Образование */}
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
+                <div className="text-[12px] opacity-70">Образование</div>
+                <div className="mt-1 text-[13px] font-medium space-y-1.5">
+                  <p>
+                    Медицинский институт Орловского государственного университета им. И.С. Тургенева,
+                    лечебное дело (2018)
+                  </p>
+                  <p>Медико-генетический научный центр, ординатура по генетике (2021)</p>
+                </div>
+              </div>
 
-          {/* Направления и услуги */}
+              {/* Повышение квалификации */}
+              <div className="p-3 rounded-xl bg-black/5 dark:bg_WHITE/10 dark:bg-white/10">
+                <div className="text-[12px] opacity-70">Повышение квалификации</div>
+                <div className="mt-1 text-[13px] font-medium">Школа анализа NGS данных «MGNGS School'22» (2022)</div>
+              </div>
+            </div>
+          </Section>
+
+          {/* Направления и CTA */}
           <Section className={`${MAX_W} mx-auto`}>
             <h2 className="text-[15px] font-semibold mb-2">Ключевые направления</h2>
             <ul className="text-[13px] space-y-1.5">
@@ -435,6 +409,7 @@ END:VCALENDAR`;
               <li>• Ведение пациентов с наследственными синдромами</li>
               <li>• Подбор лабораторных тестов, маршрутизация</li>
             </ul>
+
             <div className="mt-3">
               <h3 className="text-[14px] font-medium mb-1">Услуги и ориентировочные тарифы</h3>
               <div className="grid grid-cols-1 gap-1.5 text-[13px]">
@@ -442,26 +417,23 @@ END:VCALENDAR`;
                   <span>Первичная консультация (60 мин)</span>
                   <span className="font-semibold">5 000–7 000 ₽</span>
                 </div>
-                <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2">
+                <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg_WHITE/10 dark:bg-white/10 px-3 py-2">
                   <span>Повторная консультация (60 мин)</span>
                   <span className="font-semibold">4 000–6 000 ₽</span>
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-             <button
-  onClick={() => setTab("book")}
-  className="w-full min-h-[44px] px-3 py-2 rounded-xl
-             bg-[var(--tg-theme-button-color,#10b981)]
-             text-[var(--tg-theme-button-text-color,#fff)]
-             text-[13px] leading-tight font-semibold text-center shadow"
->
-  Записаться на консультацию
-</button>
 
-              <span className="text-[12px] text-[color:var(--tg-theme-hint-color,#6b7280)]">
-                Онлайн и офлайн приём, время — по Москве
-              </span>
+            <div className="mt-3">
+              <button
+                onClick={() => setTab("book")}
+                className="w-full min-h-[44px] px-3 py-2 rounded-xl
+                           bg-[var(--tg-theme-button-color,#10b981)]
+                           text-[var(--tg-theme-button-text-color,#fff)]
+                           text-[13px] leading-tight font-semibold text-center shadow"
+              >
+                Записаться на консультацию
+              </button>
             </div>
           </Section>
         </div>
@@ -479,7 +451,7 @@ END:VCALENDAR`;
                     key={f}
                     onClick={() => setFormat(f)}
                     className={
-                      "px-2.5 h-8 rounded-md text-[12.5px] transition " +
+                      "px-2 h-8 rounded-md text-[12.5px] transition " +
                       (format === f
                         ? "bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] shadow"
                         : "opacity-90")
@@ -497,7 +469,7 @@ END:VCALENDAR`;
             <SlotsList slots={slots} selected={selectedSlot} onPick={setSelectedSlot} />
           </Section>
 
-          <Section className={`${MAX_W} mx-auto`}>
+          <Section className={`${MAX_W} mx_auto`.replace("_", "-")}>
             <div className="grid gap-2">
               <input
                 className="h-10 rounded-xl border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/70 dark:bg-white/5 px-3 text-sm"
@@ -525,27 +497,27 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* Награды */}
+      {/* ДИПЛОМЫ/НАГРАДЫ */}
       {tab === "awards" && (
-  <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
-    {LOCAL_AWARDS.map((src, i) => (
-      <figure
-        key={src}
-        className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
-      >
-        <img
-          src={src}
-          alt={`Диплом/награда ${i + 1}`}
-          className="w-full h-40 object-cover"
-          loading="lazy"
-          decoding="async"
-        />
-      </figure>
-    ))}
-  </div>
-)}
+        <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
+          {LOCAL_AWARDS.map((src, i) => (
+            <figure
+              key={src}
+              className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
+            >
+              <img
+                src={src}
+                alt={`Диплом/награда ${i + 1}`}
+                className="w-full h-40 object-cover"
+                loading="lazy"
+                decoding="async"
+              />
+            </figure>
+          ))}
+        </div>
+      )}
 
-      {/* Отзывы (скриншоты) */}
+      {/* ОТЗЫВЫ */}
       {tab === "reviews" && (
         <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
           {reviews.map((r) => (
@@ -553,13 +525,13 @@ END:VCALENDAR`;
               key={r.id}
               className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
             >
-              <img src={r.image_url} alt="" className="w-full h-44 object-cover" />
+              <img src={r.image_url} alt="" className="w-full h-44 object-cover" loading="lazy" decoding="async" />
             </div>
           ))}
         </div>
       )}
 
-      {/* Футер: кнопка подтверждения (фикс снизу) */}
+      {/* ФУТЕР: кнопка подтверждения */}
       {tab === "book" && (
         <footer className="fixed bottom-0 left-0 right-0 z-10 backdrop-blur bg-[color:var(--tg-theme-bg-color,#f6f7f9)]/92 border-t border-[color:var(--tg-theme-section-separator-color,#e5e7eb)]">
           <div className={`${MAX_W} mx-auto px-3 py-2 flex items-center gap-2`}>
@@ -570,9 +542,7 @@ END:VCALENDAR`;
             </div>
             <button
               onClick={onBook}
-              disabled={
-                busy || !selectedSlot || !!slots.find((s) => s.id === selectedSlot)?.is_booked
-              }
+              disabled={busy || !selectedSlot || !!slots.find((s) => s.id === selectedSlot)?.is_booked}
               className={
                 "ml-auto h-10 px-4 rounded-xl text-[13.5px] font-medium shadow " +
                 (!selectedSlot || busy
