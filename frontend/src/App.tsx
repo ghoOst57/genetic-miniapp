@@ -341,10 +341,10 @@ END:VCALENDAR`;
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-90" />
-             <img
+            <img
   src={DOCTOR_PHOTO}
-  className="w-full h-40 object-cover mix-blend-soft-light"
   alt=""
+  className="w-full h-48 object-cover object-[50%_18%] mix-blend-soft-light"
 />
 
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.25),transparent_40%)]" />
