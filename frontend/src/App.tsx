@@ -312,17 +312,22 @@ END:VCALENDAR`;
               ["reviews", "Отзывы"],
             ].map(([k, l]) => (
               <button
-                key={k}
-                onClick={() => setTab(k as any)}
-                className={
-                  "px-2.5 h-8 rounded-md text-[12.5px] transition " +
-                  (tab === k
-                    ? "bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] shadow"
-                    : "text-[color:var(--tg-theme-text-color,#111827)]/90")
-                }
-              >
-                {l}
-              </button>
+  key={k}
+  onClick={() => setTab(k as any)}
+  className={
+    [
+      // компактнее и без переноса
+      "px-2 h-8 rounded-md text-[12px] leading-none whitespace-nowrap",
+      "min-w-[72px] font-medium transition",
+      // активный / неактивный
+      tab === k
+        ? "bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] shadow"
+        : "text-[color:var(--tg-theme-text-color,#111827)]/90 hover:opacity-90",
+    ].join(" ")
+  }
+>
+  {l}
+</button>
             ))}
           </div>
         </div>
@@ -416,12 +421,16 @@ END:VCALENDAR`;
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <button
-                onClick={() => setTab("book")}
-                className="h-10 px-4 rounded-xl bg-[var(--tg-theme-button-color,#10b981)] text-[var(--tg-theme-button-text-color,#fff)] text-[13.5px] font-medium shadow"
-              >
-                Записаться на консультацию
-              </button>
+             <button
+  onClick={() => setTab("book")}
+  className="w-full min-h-[44px] px-3 py-2 rounded-xl
+             bg-[var(--tg-theme-button-color,#10b981)]
+             text-[var(--tg-theme-button-text-color,#fff)]
+             text-[13px] leading-tight font-semibold text-center shadow"
+>
+  Записаться на консультацию
+</button>
+
               <span className="text-[12px] text-[color:var(--tg-theme-hint-color,#6b7280)]">
                 Онлайн и офлайн приём, время — по Москве
               </span>
