@@ -70,7 +70,8 @@ export type AvailabilitySlot = {
 };
 
 // ========================= API (реальные вызовы) =========================
-const API_BASE: string = (window as any).__API_BASE__ || (typeof importMeta !== 'undefined' && (importMeta as any).env?.VITE_API_BASE) || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) || "http://localhost:8000";
+const API_BASE = (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
+
 
 const api = {
   async getDoctor() {
