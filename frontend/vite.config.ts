@@ -1,6 +1,17 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from 'tailwindcss'
+import autoprefixer from 'autoprefixer'
+
+// Форсим PostCSS c Tailwind + Autoprefixer, чтобы Vite точно их применил
 export default defineConfig({
   plugins: [react()],
-  build: { target: ["es2018","safari13"] },
-});
+  css: {
+    postcss: {
+      plugins: [tailwindcss(), autoprefixer()],
+    },
+  },
+  server: {
+    allowedHosts: ['localhost'],
+  },
+})
