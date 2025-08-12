@@ -6,7 +6,6 @@ export default defineConfig({
   plugins: [
     react(),
     legacy({
-      // даём запас по старым вебвью Telegram
       targets: ['defaults', 'not IE 11', 'iOS >= 12', 'Android >= 7'],
       modernPolyfills: true,
       renderLegacyChunks: true,
@@ -14,7 +13,6 @@ export default defineConfig({
     }),
   ],
   build: {
-    // понижаем таргет, чтобы Safari/WKWebView не падал
     target: ['es2018', 'safari13'],
   },
 })
