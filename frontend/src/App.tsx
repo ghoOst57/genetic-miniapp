@@ -19,7 +19,7 @@ const LOCAL_AWARDS = [
   "/awards/award6.jpg",
 ];
 
-// Локальные отзывы (картинки из public/reviews/)
+// Локальные отзывы из public/reviews/ (можно расширять списком своих файлов)
 const LOCAL_REVIEWS = [
   "/reviews/review1.jpg",
   "/reviews/review2.jpg",
@@ -55,12 +55,6 @@ const fmtTimeMSK = (iso: string) =>
 
 /** ==== СКЕЛЕТОНЫ ==== */
 const Shimmer = "animate-pulse bg-black/10 dark:bg-white/10 rounded";
-const SkLine = ({ h = 12, w = "100%" }: { h?: number; w?: string }) => (
-  <div className={`${Shimmer}`} style={{ height: h, width: w }} />
-);
-const SkAvatar = ({ size = 64 }: { size?: number }) => (
-  <div className={`${Shimmer} rounded-full`} style={{ width: size, height: size }} />
-);
 
 /** ==== БАЗОВЫЕ КОМПОНЕНТЫ ==== */
 const Section = ({
@@ -136,7 +130,7 @@ function DayStrip({
   );
 }
 
-/** ==== СПИСОК СЛОТОВ (компакт + цвета занято/свободно) ==== */
+/** ==== СПИСОК СЛОТОВ ==== */
 function SlotsList({
   slots,
   selected,
@@ -265,7 +259,7 @@ function Lightbox({
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY;
-    const factor = Math.exp(-delta / 300); // плавный zoom
+    const factor = Math.exp(-delta / 300);
     const newScale = clamp(scale * factor, 1, 4);
     setScale(newScale);
   };
@@ -275,9 +269,7 @@ function Lightbox({
     Math.hypot(a.x - b.x, a.y - b.y);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    if (!containerRef.current) return;
     if (e.touches.length === 2) {
-      // Пинч
       const p1 = getPoint(e.touches[0]);
       const p2 = getPoint(e.touches[1]);
       startDistRef.current = dist(p1, p2);
@@ -285,7 +277,6 @@ function Lightbox({
       startOffsetRef.current = offset;
       modeRef.current = "pinch";
     } else if (e.touches.length === 1) {
-      // Пан (если увеличено)
       startPointRef.current = getPoint(e.touches[0]);
       startOffsetRef.current = offset;
       modeRef.current = scale > 1 ? "pan" : "none";
@@ -302,10 +293,6 @@ function Lightbox({
       const d = dist(p1, p2);
       const nextScale = clamp((d / startDistRef.current) * startScaleRef.current, 1, 4);
       setScale(nextScale);
-      // Дополнительно слегка смещаем по среднему жеста
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      const base = startOffsetRef.current;
-      setOffset({ x: base.x + (mid.x - window.innerWidth / 2) * 0.02, y: base.y + (mid.y - window.innerHeight / 2) * 0.02 });
     } else if (modeRef.current === "pan" && e.touches.length === 1) {
       const p = getPoint(e.touches[0]);
       const dx = p.x - startPointRef.current.x;
@@ -316,7 +303,6 @@ function Lightbox({
 
   const onTouchEnd = () => {
     if (modeRef.current !== "none") {
-      // лёгкий бампер, чтобы картинка не "улетала"
       const maxShift = 200 * (scale - 1);
       setOffset((o) => ({
         x: clamp(o.x, -maxShift, maxShift),
@@ -333,7 +319,6 @@ function Lightbox({
   const onDoubleTap = (e: React.MouseEvent | React.TouchEvent) => {
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      // dbl
       setScale((s) => {
         const ns = s > 1 ? 1 : 2;
         if (ns === 1) setOffset({ x: 0, y: 0 });
@@ -423,11 +408,31 @@ export default function App() {
   // Табы
   const [tab, setTab] = useState<"profile" | "book" | "awards" | "reviews">("profile");
 
-  // Данные + загрузка
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [doctorLoading, setDoctorLoading] = useState(true);
+  // ======= 1) ОПТИМИСТИЧЕСКИЕ ДАННЫЕ ВРАЧА (мгновенный рендер) =======
+  const STATIC_DOCTOR: Doctor = {
+    id: "doc-1",
+    name: DOC_DISPLAY_NAME,
+    title: "Врач-генетик",
+    years_experience: 12,
+    city: "Москва",
+    formats: ["online", "offline"],
+    languages: ["ru", "en"],
+    photo_url: DOCTOR_PHOTO,
+    bio:
+      "Клинический генетик. Индивидуальные планы обследования, интерпретация NGS-панелей, пренатальная и предиктивная генетика, наследственные синдромы.",
+  };
+  const [doctor, setDoctor] = useState<Doctor>(() => {
+    try {
+      const cached = sessionStorage.getItem("doctor_cache");
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return STATIC_DOCTOR;
+  });
 
-  const [reviews, setReviews] = useState<ReviewAsset[]>([]);
+  // Отзывы (локальные) + загрузка флага
+  const [reviews, setReviews] = useState<ReviewAsset[]>(
+    LOCAL_REVIEWS.map((src, i) => ({ id: `loc-${i}`, image_url: src }))
+  );
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
   // Расписание
@@ -464,25 +469,42 @@ export default function App() {
     } catch {}
   }, [tg]);
 
-  /** Загрузка профиля */
+  /** ======= 1а) Тихая загрузка врача с таймаутом и кэшем ======= */
   useEffect(() => {
-    setDoctorLoading(true);
-    fetch(`${API_BASE}/doctor`)
-      .then((r) => r.json())
-      .then((d) => setDoctor(d))
-      .catch(() => {})
-      .finally(() => setDoctorLoading(false));
-  }, []);
+    let cancelled = false;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 2500); // не ждём больше 2.5 c (например, если Render «холодный»)
 
-/** Загрузка отзывов при открытии вкладки (локальные картинки) */
-useEffect(() => {
-  if (tab === "reviews" && reviews.length === 0) {
-    setReviewsLoading(true);
-    const arr = LOCAL_REVIEWS.map((src, i) => ({ id: `loc-${i}`, image_url: src }));
-    setReviews(arr);
-    setReviewsLoading(false);
-  }
-}, [tab, reviews.length]);
+    fetch(`${API_BASE}/doctor`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (cancelled) return;
+        // имя оставляем нашу отображаемую форму
+        const merged = { ...STATIC_DOCTOR, ...d, name: DOC_DISPLAY_NAME, photo_url: DOCTOR_PHOTO };
+        setDoctor(merged);
+        try {
+          sessionStorage.setItem("doctor_cache", JSON.stringify(merged));
+        } catch {}
+      })
+      .catch(() => {
+        // если не вышло — остаёмся на STATIC_DOCTOR/кэше, без визуальной задержки
+      })
+      .finally(() => clearTimeout(t));
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_BASE]);
+
+  /** Загрузка отзывов больше не нужна (они локальные), но оставим хук на будущее */
+  useEffect(() => {
+    if (tab === "reviews") {
+      setReviewsLoading(false);
+    }
+  }, [tab]);
 
   /** Загрузка слотов за день */
   const loadDay = (iso: string, fmt: "any" | Format) => {
@@ -508,14 +530,12 @@ useEffect(() => {
     const jumpToNearest = async () => {
       setSlotsLoading(true);
       try {
-        // Ищем в ближайшие 14 дней
         for (let i = 0; i < 14; i++) {
           const d = new Date(today.getTime() + i * 86400000);
           const iso = toYMD(d);
           const r = await fetch(`${API_BASE}/availability?from_date=${iso}&to_date=${iso}&format=${format}`);
           const arr: Slot[] = await r.json();
           if (aborted) return;
-
           if (Array.isArray(arr) && arr.length) {
             setActiveDate(iso);
             setSlots(arr);
@@ -525,7 +545,6 @@ useEffect(() => {
           }
         }
       } catch {
-        // noop
       } finally {
         if (!aborted) setSlotsLoading(false);
       }
@@ -570,7 +589,6 @@ useEffect(() => {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
 
-      // .ics
       const fmt = (s: string) => s.replace(/[-:]/g, "").replace(".000Z", "Z");
       const ics = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -604,6 +622,15 @@ END:VCALENDAR`;
       setBusy(false);
     }
   };
+
+  /** ======= 2) АВТО-ЗАКРЫТИЕ ЛАЙТБОКСА ПРИ СМЕНЕ ВКЛАДКИ ======= */
+  useEffect(() => {
+    if (lbOpen) {
+      setLbOpen(false);
+      setLbIndex(0);
+      // картинки можно не чистить: setLbImages([]) — необязательно
+    }
+  }, [tab, lbOpen]);
 
   /** ===== RENDER ===== */
   return (
@@ -647,10 +674,10 @@ END:VCALENDAR`;
       {/* ПРОФИЛЬ */}
       {tab === "profile" && (
         <div className="fade-in">
-          {/* HERO (ещё прозрачнее вуаль, фото виднее) */}
+          {/* HERO (насыщенный цвет, как раньше) */}
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-50 mix-blend-soft-light" />
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-60 mix-blend-soft-light" />
               <img
                 src={DOCTOR_PHOTO}
                 alt=""
@@ -670,115 +697,89 @@ END:VCALENDAR`;
                   <div className="min-w-0">
                     <div className="text-[16px] font-semibold leading-tight">{DOC_DISPLAY_NAME}</div>
                     <div className="text-[12.5px] opacity-90">
-                      {(doctor?.title || "Врач-генетик")} • {(doctor?.city || "Москва")}
+                      {doctor.title} • {doctor.city}
                     </div>
                   </div>
                 </div>
-                {!doctorLoading && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <Badge>🧬 {doctor?.years_experience || 12} лет практики</Badge>
-                    <Badge>🌍 Языки: {(doctor?.languages || ["ru", "en"]).join(", ")}</Badge>
-                    <Badge>🗓️ Длительность: 60 мин</Badge>
-                    <Badge>
-                      💬 {(doctor?.formats || ["online", "offline"]).includes("online") ? "Онлайн" : ""}
-                      {(doctor?.formats || ["online", "offline"]).includes("offline") ? " · Офлайн" : ""}
-                    </Badge>
-                  </div>
-                )}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Badge>🧬 {doctor.years_experience} лет практики</Badge>
+                  <Badge>🌍 Языки: {(doctor.languages || []).join(", ")}</Badge>
+                  <Badge>🗓️ Длительность: 60 мин</Badge>
+                  <Badge>
+                    💬 {doctor.formats?.includes("online") ? "Онлайн" : ""}
+                    {doctor.formats?.includes("offline") ? " · Офлайн" : ""}
+                  </Badge>
+                </div>
               </div>
             </div>
           </div>
 
           {/* О специалисте */}
           <Section className={`${MAX_W} mx-auto`}>
-            {doctorLoading ? (
-              <div className="space-y-2">
-                <SkLine h={16} w="40%" />
-                <SkLine h={12} />
-                <SkLine h={12} w="90%" />
-                <SkLine h={12} w="80%" />
-              </div>
-            ) : (
-              <>
-                <h2 className="text-[15px] font-semibold mb-2">О специалисте</h2>
-                <p className="text-[13px] leading-relaxed">
-                  Клинический генетик. Индивидуальные планы обследования, интерпретация NGS-панелей,
-                  пренатальная и предиктивная генетика, наследственные синдромы. Работа с семейными
-                  рисками, составление генеалогического древа, рекомендации по скринингам.
-                </p>
+            <h2 className="text-[15px] font-semibold mb-2">О специалисте</h2>
+            <p className="text-[13px] leading-relaxed">
+              {doctor.bio}
+            </p>
 
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  {/* Образование */}
-                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-                    <div className="text-[12px] opacity-70">Образование</div>
-                    <div className="mt-1 text-[13px] font-medium space-y-1.5">
-                      <p>
-                        Медицинский институт Орловского государственного университета им. И.С. Тургенева,
-                        лечебное дело (2018)
-                      </p>
-                      <p>Медико-генетический научный центр, ординатура по генетике (2021)</p>
-                    </div>
-                  </div>
-
-                  {/* Повышение квалификации */}
-                  <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
-                    <div className="text-[12px] opacity-70">Повышение квалификации</div>
-                    <div className="mt-1 text-[13px] font-medium">
-                      Школа анализа NGS данных «MGNGS School'22» (2022)
-                    </div>
-                  </div>
+            <div className="mt-3 grid grid-cols-1 gap-2">
+              {/* Образование */}
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/10">
+                <div className="text-[12px] opacity-70">Образование</div>
+                <div className="mt-1 text-[13px] font-medium space-y-1.5">
+                  <p>
+                    Медицинский институт Орловского государственного университета им. И.С. Тургенева,
+                    лечебное дело (2018)
+                  </p>
+                  <p>Медико-генетический научный центр, ординатура по генетике (2021)</p>
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Повышение квалификации */}
+              <div className="p-3 rounded-xl bg-black/5 dark:bg白/10 dark:bg-white/10">
+                <div className="text-[12px] opacity-70">Повышение квалификации</div>
+                <div className="mt-1 text-[13px] font-medium">
+                  Школа анализа NGS данных «MGNGS School'22» (2022)
+                </div>
+              </div>
+            </div>
           </Section>
 
           {/* Направления и CTA */}
           <Section className={`${MAX_W} mx-auto`}>
-            {doctorLoading ? (
-              <div className="space-y-2">
-                <SkLine h={16} w="60%" />
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <SkLine key={i} h={12} />
-                ))}
+            <h2 className="text-[15px] font-semibold mb-2">Ключевые направления</h2>
+            <ul className="text-[13px] space-y-1.5">
+              <li>• Консультация пар при планировании беременности</li>
+              <li>• Интерпретация результатов NGS / WES / панелей</li>
+              <li>• Ведение пациентов с наследственными синдромами</li>
+              <li>• Подбор лабораторных тестов, маршрутизация</li>
+            </ul>
+
+            <div className="mt-3">
+              <h3 className="text-[14px] font-medium mb-1">Услуги и ориентировочные тарифы</h3>
+              <div className="grid grid-cols-1 gap-1.5 text-[13px]">
+                <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2">
+                  <span>Первичная консультация (60 мин)</span>
+                  <span className="font-semibold">5 000–7 000 ₽</span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2">
+                  <span>Повторная консультация (60 мин)</span>
+                  <span className="font-semibold">4 000–6 000 ₽</span>
+                </div>
               </div>
-            ) : (
-              <>
-                <h2 className="text-[15px] font-semibold mb-2">Ключевые направления</h2>
-                <ul className="text-[13px] space-y-1.5">
-                  <li>• Консультация пар при планировании беременности</li>
-                  <li>• Интерпретация результатов NGS / WES / панелей</li>
-                  <li>• Ведение пациентов с наследственными синдромами</li>
-                  <li>• Подбор лабораторных тестов, маршрутизация</li>
-                </ul>
+            </div>
 
-                <div className="mt-3">
-                  <h3 className="text-[14px] font-medium mb-1">Услуги и ориентировочные тарифы</h3>
-                  <div className="grid grid-cols-1 gap-1.5 text-[13px]">
-                    <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2">
-                      <span>Первичная консультация (60 мин)</span>
-                      <span className="font-semibold">5 000–7 000 ₽</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2">
-                      <span>Повторная консультация (60 мин)</span>
-                      <span className="font-semibold">4 000–6 000 ₽</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <button
-                    onClick={() => setTab("book")}
-                    className="w-full min-h-[40px] px-3 py-2 rounded-xl
-                               bg-[var(--tg-theme-button-color,#10b981)]
-                               text-[var(--tg-theme-button-text-color,#fff)]
-                               text-[12.5px] leading-snug font-semibold text-center
-                               whitespace-normal break-keep shadow"
-                  >
-                    Записаться на консультацию
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="mt-3">
+              <button
+                onClick={() => setTab("book")}
+                className="w-full min-h-[40px] px-3 py-2 rounded-xl
+                           bg-[var(--tg-theme-button-color,#10b981)]
+                           text-[var(--tg-theme-button-text-color,#fff)]
+                           text-[12.5px] leading-snug font-semibold text-center
+                           whitespace-normal break-keep shadow"
+              >
+                Записаться на консультацию
+              </button>
+            </div>
           </Section>
         </div>
       )}
@@ -841,7 +842,7 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* ДИПЛОМЫ/НАГРАДЫ (лайтбокс с zoom/pinch) */}
+      {/* ДИПЛОМЫ/НАГРАДЫ */}
       {tab === "awards" && (
         <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
           {LOCAL_AWARDS.map((src, i) => (
@@ -876,28 +877,22 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* ОТЗЫВЫ (лайтбокс + скелетоны) */}
+      {/* ОТЗЫВЫ */}
       {tab === "reviews" && (
         <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
-          {reviewsLoading &&
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className={`${Shimmer} h-44 rounded-2xl`} />
-            ))}
-          {!reviewsLoading &&
-            reviews.map((r, i) => (
-              <div
-                key={r.id}
-                className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur active:opacity-90"
-                onClick={() => {
-                  const imgs = reviews.map((x) => x.image_url);
-                  setLbImages(imgs);
-                  setLbIndex(i);
-                  setLbOpen(true);
-                }}
-              >
-                <img src={r.image_url} alt="" className="w-full h-44 object-cover" loading="lazy" decoding="async" />
-              </div>
-            ))}
+          {LOCAL_REVIEWS.map((src, i) => (
+            <div
+              key={src}
+              className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur active:opacity-90"
+              onClick={() => {
+                setLbImages(LOCAL_REVIEWS);
+                setLbIndex(i);
+                setLbOpen(true);
+              }}
+            >
+              <img src={src} alt="" className="w-full h-44 object-cover" loading="lazy" decoding="async" />
+            </div>
+          ))}
 
           {lbOpen && tab === "reviews" && (
             <Lightbox
