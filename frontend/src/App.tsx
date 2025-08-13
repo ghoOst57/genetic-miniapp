@@ -644,7 +644,7 @@ END:VCALENDAR`;
           {/* HERO (ещё прозрачнее вуаль, фото виднее) */}
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-60 mix-blend-soft-light" />
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-50 mix-blend-soft-light" />
               <img
                 src={DOCTOR_PHOTO}
                 alt=""
