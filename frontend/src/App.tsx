@@ -216,6 +216,7 @@ function Lightbox({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [showHint, setShowHint] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+
   const lastTapRef = useRef(0);
   const modeRef = useRef<"none" | "pan" | "pinch">("none");
   const startOffsetRef = useRef({ x: 0, y: 0 });
@@ -223,12 +224,14 @@ function Lightbox({
   const startDistRef = useRef(1);
   const startScaleRef = useRef(1);
 
+  // 👉 гард от «мгновенного закрытия»
+ const openedAtRef = useRef<number>(performance.now());
+
   const resetZoom = useCallback(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
   }, []);
 
-  // Клавиатура
   useKey(
     useCallback(
       (e: KeyboardEvent) => {
@@ -246,7 +249,6 @@ function Lightbox({
     )
   );
 
-  // Сброс zoom при смене изображения
   useEffect(() => {
     resetZoom();
   }, [index, images, resetZoom]);
@@ -258,10 +260,8 @@ function Lightbox({
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY;
-    const factor = Math.exp(-delta / 300);
-    const newScale = clamp(scale * factor, 1, 4);
-    setScale(newScale);
+    const factor = Math.exp(-e.deltaY / 300);
+    setScale((s) => clamp(s * factor, 1, 4));
   };
 
   const getPoint = (touch: Touch) => ({ x: touch.clientX, y: touch.clientY });
@@ -330,17 +330,26 @@ function Lightbox({
 
   const src = images[index];
 
+  // 👉 обработчик клика по фону с защитой от «первого клика»
+  const handleOverlayClick = (e: React.MouseEvent) => {
+  // закрываем ТОЛЬКО при клике по фону, не по картинке/кнопкам
+  if (e.target !== e.currentTarget) return;
+  const elapsed = performance.now() - openedAtRef.current;
+  if (elapsed < 600) return; // увеличили порог
+  onClose();
+};
+
   return (
     <div
       ref={containerRef}
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center select-none"
-      onClick={onClose}
+      onClick={handleOverlayClick}
       onWheel={onWheel}
       style={{ touchAction: "none" }}
     >
       <div
         className="relative"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()} // не пускаем клик к фону
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -366,11 +375,15 @@ function Lightbox({
 
       <button
         aria-label="Закрыть"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
         className="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/15 text-white text-xl leading-none flex items-center justify-center"
       >
         ×
       </button>
+
       {images.length > 1 && (
         <>
           <button
@@ -400,6 +413,7 @@ function Lightbox({
     </div>
   );
 }
+
 
 /** ==== ГЛАВНЫЙ КОМПОНЕНТ ==== */
 export default function App() {
