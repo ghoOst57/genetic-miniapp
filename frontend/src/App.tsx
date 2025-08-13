@@ -1,11 +1,11 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 
 /** ==== БАЗА API ==== */
 const API_BASE = (window as any).__API_BASE__ || import.meta.env.VITE_API_BASE || "";
 
 /** ==== КОНСТАНТЫ UI ==== */
-const MAX_W = "max-w-[328px]"; // ещё уже — под Telegram
+const MAX_W = "max-w-[328px]"; // узкое полотно под Telegram
 const DOC_DISPLAY_NAME = "Андреева Наталия Игоревна";
 const DOCTOR_PHOTO = "/doctor.jpg?v=2";
 
@@ -128,7 +128,7 @@ function DayStrip({
   );
 }
 
-/** ==== СПИСОК СЛОТОВ (компакт) ==== */
+/** ==== СПИСОК СЛОТОВ (компакт + цвета занято/свободно) ==== */
 function SlotsList({
   slots,
   selected,
@@ -165,8 +165,8 @@ function SlotsList({
 
         const base =
           "w-full h-9 rounded-lg border text-[12.5px] font-medium transition flex items-center justify-between px-3";
-        const clsBusy = "bg-[#ef4444] text-white border-[#ef4444] cursor-not-allowed";
-        const clsActive = "bg-[#10b981] text-white border-[#10b981]";
+        const clsBusy = "bg-[#ef4444] text-white border-[#ef4444] cursor-not-allowed"; // красный
+        const clsActive = "bg-[#10b981] text-white border-[#10b981]"; // зелёный
         const clsIdle =
           "bg-[rgba(0,0,0,.04)] dark:bg-[rgba(255,255,255,.08)] border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] text-[color:var(--tg-theme-text-color,#111827)]/90 hover:opacity-90";
 
@@ -188,13 +188,15 @@ function SlotsList({
   );
 }
 
-/** ==== ЛАЙТБОКС ДЛЯ НАГРАД ==== */
+/** ==== ЛАЙТБОКС С ЗУМОМ/ПИНЧЕМ ==== */
 function useKey(handler: (e: KeyboardEvent) => void) {
   useEffect(() => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [handler]);
 }
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
 function Lightbox({
   images,
   index,
@@ -208,30 +210,167 @@ function Lightbox({
   onPrev: () => void;
   onNext: () => void;
 }) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [showHint, setShowHint] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastTapRef = useRef(0);
+  const modeRef = useRef<"none" | "pan" | "pinch">("none");
+  const startOffsetRef = useRef({ x: 0, y: 0 });
+  const startPointRef = useRef({ x: 0, y: 0 });
+  const startDistRef = useRef(1);
+  const startScaleRef = useRef(1);
+
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, []);
+
+  // Клавиатура
   useKey(
     useCallback(
       (e: KeyboardEvent) => {
         if (e.key === "Escape") onClose();
-        if (e.key === "ArrowLeft") onPrev();
-        if (e.key === "ArrowRight") onNext();
+        if (e.key === "ArrowLeft") {
+          resetZoom();
+          onPrev();
+        }
+        if (e.key === "ArrowRight") {
+          resetZoom();
+          onNext();
+        }
       },
-      [onClose, onPrev, onNext]
+      [onClose, onPrev, onNext, resetZoom]
     )
   );
+
+  // Сброс zoom при смене изображения
+  useEffect(() => {
+    resetZoom();
+  }, [index, images, resetZoom]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowHint(false), 1400);
+    return () => clearTimeout(t);
+  }, []);
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY;
+    const factor = Math.exp(-delta / 300); // плавный zoom
+    const newScale = clamp(scale * factor, 1, 4);
+    setScale(newScale);
+  };
+
+  const getPoint = (touch: Touch) => ({ x: touch.clientX, y: touch.clientY });
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (!containerRef.current) return;
+    if (e.touches.length === 2) {
+      // Пинч
+      const p1 = getPoint(e.touches[0]);
+      const p2 = getPoint(e.touches[1]);
+      startDistRef.current = dist(p1, p2);
+      startScaleRef.current = scale;
+      startOffsetRef.current = offset;
+      modeRef.current = "pinch";
+    } else if (e.touches.length === 1) {
+      // Пан (если увеличено)
+      startPointRef.current = getPoint(e.touches[0]);
+      startOffsetRef.current = offset;
+      modeRef.current = scale > 1 ? "pan" : "none";
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (modeRef.current === "none") return;
+    e.preventDefault();
+
+    if (modeRef.current === "pinch" && e.touches.length === 2) {
+      const p1 = getPoint(e.touches[0]);
+      const p2 = getPoint(e.touches[1]);
+      const d = dist(p1, p2);
+      const nextScale = clamp((d / startDistRef.current) * startScaleRef.current, 1, 4);
+      setScale(nextScale);
+      // Дополнительно слегка смещаем по среднему жеста
+      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const base = startOffsetRef.current;
+      setOffset({ x: base.x + (mid.x - window.innerWidth / 2) * 0.02, y: base.y + (mid.y - window.innerHeight / 2) * 0.02 });
+    } else if (modeRef.current === "pan" && e.touches.length === 1) {
+      const p = getPoint(e.touches[0]);
+      const dx = p.x - startPointRef.current.x;
+      const dy = p.y - startPointRef.current.y;
+      setOffset({ x: startOffsetRef.current.x + dx, y: startOffsetRef.current.y + dy });
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (modeRef.current !== "none") {
+      // лёгкий бампер, чтобы картинка не "улетала"
+      const maxShift = 200 * (scale - 1);
+      setOffset((o) => ({
+        x: clamp(o.x, -maxShift, maxShift),
+        y: clamp(o.y, -maxShift, maxShift),
+      }));
+    }
+    if (scale <= 1.02) {
+      setScale(1);
+      setOffset({ x: 0, y: 0 });
+    }
+    modeRef.current = "none";
+  };
+
+  const onDoubleTap = (e: React.MouseEvent | React.TouchEvent) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // dbl
+      setScale((s) => {
+        const ns = s > 1 ? 1 : 2;
+        if (ns === 1) setOffset({ x: 0, y: 0 });
+        return ns;
+      });
+    }
+    lastTapRef.current = now;
+  };
 
   const src = images[index];
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center"
+      ref={containerRef}
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center select-none"
       onClick={onClose}
+      onWheel={onWheel}
+      style={{ touchAction: "none" }}
     >
-      <img
-        src={src}
-        alt=""
-        className="max-h-[88vh] max-w-[92vw] object-contain rounded-xl shadow"
+      <div
+        className="relative"
         onClick={(e) => e.stopPropagation()}
-      />
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={(e) => e.preventDefault()}
+        onDoubleClick={onDoubleTap as any}
+      >
+        <img
+          src={src}
+          alt=""
+          className="max-h-[88vh] max-w-[92vw] object-contain rounded-xl shadow will-change-transform"
+          style={{
+            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+            transition: modeRef.current === "none" ? "transform .15s ease-out" : "none",
+          }}
+          draggable={false}
+        />
+        {showHint && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/90 text-[12px] bg-black/40 px-2 py-1 rounded">
+            Сожмите/разведите пальцы для увеличения
+          </div>
+        )}
+      </div>
+
       <button
         aria-label="Закрыть"
         onClick={onClose}
@@ -244,6 +383,7 @@ function Lightbox({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              resetZoom();
               onPrev();
             }}
             className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/15 text-white text-lg"
@@ -254,6 +394,7 @@ function Lightbox({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              resetZoom();
               onNext();
             }}
             className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/15 text-white text-lg"
@@ -299,11 +440,12 @@ export default function App() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Лайтбокс
+  // Лайтбокс (общий)
   const [lbOpen, setLbOpen] = useState(false);
   const [lbIndex, setLbIndex] = useState(0);
-  const lbPrev = () => setLbIndex((i) => (i - 1 + LOCAL_AWARDS.length) % LOCAL_AWARDS.length);
-  const lbNext = () => setLbIndex((i) => (i + 1) % LOCAL_AWARDS.length);
+  const [lbImages, setLbImages] = useState<string[]>([]);
+  const lbPrev = () => setLbIndex((i) => (i - 1 + lbImages.length) % lbImages.length);
+  const lbNext = () => setLbIndex((i) => (i + 1) % lbImages.length);
 
   /** Telegram init */
   useEffect(() => {
@@ -324,7 +466,7 @@ export default function App() {
       .finally(() => setDoctorLoading(false));
   }, []);
 
-  /** Загрузка отзывов при открытии соответствующей вкладки */
+  /** Загрузка отзывов при открытии вкладки */
   useEffect(() => {
     if (tab === "reviews" && reviews.length === 0) {
       setReviewsLoading(true);
@@ -336,7 +478,7 @@ export default function App() {
     }
   }, [tab, reviews.length]);
 
-  /** Загрузка слотов (по дню/формату) — только на вкладке «Запись» */
+  /** Загрузка слотов за день */
   const loadDay = (iso: string, fmt: "any" | Format) => {
     const from = iso;
     const to = iso;
@@ -351,10 +493,50 @@ export default function App() {
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false));
   };
+
+  /** Прыжок на ближайший доступный день/время при входе на вкладку «Запись» */
+  useEffect(() => {
+    if (tab !== "book") return;
+
+    let aborted = false;
+    const jumpToNearest = async () => {
+      setSlotsLoading(true);
+      try {
+        // Ищем в ближайшие 14 дней
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(today.getTime() + i * 86400000);
+          const iso = toYMD(d);
+          const r = await fetch(`${API_BASE}/availability?from_date=${iso}&to_date=${iso}&format=${format}`);
+          const arr: Slot[] = await r.json();
+          if (aborted) return;
+
+          if (Array.isArray(arr) && arr.length) {
+            setActiveDate(iso);
+            setSlots(arr);
+            const firstFree = arr.find((s) => !s.is_booked) || arr[0];
+            setSelectedSlot(firstFree?.id || "");
+            break;
+          }
+        }
+      } catch {
+        // noop
+      } finally {
+        if (!aborted) setSlotsLoading(false);
+      }
+    };
+
+    jumpToNearest();
+    return () => {
+      aborted = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, format]);
+
+  /** При ручном выборе даты — подгружаем слоты */
   useEffect(() => {
     if (tab === "book") loadDay(activeDate, format);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, activeDate, format]);
+  }, [activeDate]);
 
   /** Создание брони */
   const onBook = async () => {
@@ -420,7 +602,7 @@ END:VCALENDAR`;
   /** ===== RENDER ===== */
   return (
     <div className="min-h-[100svh] text-[color:var(--tg-theme-text-color,#111827)] overflow-x-hidden bg-[linear-gradient(180deg,rgba(20,184,166,.10)_0%,rgba(59,130,246,.06)_30%,transparent_70%)]">
-      {/* Хедер: заголовок СВЕРХУ и ниже табы */}
+      {/* Хедер: заголовок сверху и ниже табы */}
       <header className="sticky top-0 z-10 backdrop-blur bg-[color:var(--tg-theme-bg-color,#f6f7f9)]/92 border-b border-[color:var(--tg-theme-section-separator-color,#e5e7eb)]">
         <div className={`${MAX_W} mx-auto px-3 py-2 flex flex-col gap-1.5`}>
           <h1 className="text-[15px] font-semibold truncate">Запись к врачу-генетику</h1>
@@ -459,44 +641,32 @@ END:VCALENDAR`;
       {/* ПРОФИЛЬ */}
       {tab === "profile" && (
         <div className="fade-in">
-          {/* HERO */}
+          {/* HERO (ещё прозрачнее вуаль, фото виднее) */}
           <div className={`${MAX_W} mx-auto px-3 pt-3`}>
             <div className="relative rounded-3xl overflow-hidden border border-white/30 dark:border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)]">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-90" />
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-cyan-500 to-indigo-500 opacity-60 mix-blend-soft-light" />
               <img
                 src={DOCTOR_PHOTO}
                 alt=""
-                className="w-full h-44 object-cover mix-blend-soft-light"
+                className="w-full h-44 object-cover"
                 style={{ objectPosition: "50% 18%" }}
                 loading="eager"
                 decoding="async"
               />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.25),transparent_40%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.22),transparent_40%)] pointer-events-none" />
               <div className="relative p-4 text-white">
                 <div className="flex items-center gap-3">
-                  {doctorLoading ? (
-                    <>
-                      <SkAvatar size={64} />
-                      <div className="grow space-y-2">
-                        <SkLine h={14} w="70%" />
-                        <SkLine h={10} w="50%" />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <img
-                        src={DOCTOR_PHOTO}
-                        className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
-                        alt=""
-                      />
-                      <div className="min-w-0">
-                        <div className="text-[16px] font-semibold leading-tight">{DOC_DISPLAY_NAME}</div>
-                        <div className="text-[12.5px] opacity-90">
-                          {doctor?.title || "Врач-генетик"} • {doctor?.city || "Москва"}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <img
+                    src={DOCTOR_PHOTO}
+                    className="w-16 h-16 rounded-full object-cover ring-2 ring-white/60"
+                    alt=""
+                  />
+                  <div className="min-w-0">
+                    <div className="text-[16px] font-semibold leading-tight">{DOC_DISPLAY_NAME}</div>
+                    <div className="text-[12.5px] opacity-90">
+                      {(doctor?.title || "Врач-генетик")} • {(doctor?.city || "Москва")}
+                    </div>
+                  </div>
                 </div>
                 {!doctorLoading && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -665,7 +835,7 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* ДИПЛОМЫ/НАГРАДЫ */}
+      {/* ДИПЛОМЫ/НАГРАДЫ (лайтбокс с zoom/pinch) */}
       {tab === "awards" && (
         <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
           {LOCAL_AWARDS.map((src, i) => (
@@ -673,6 +843,7 @@ END:VCALENDAR`;
               key={src}
               className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur active:opacity-90"
               onClick={() => {
+                setLbImages(LOCAL_AWARDS);
                 setLbIndex(i);
                 setLbOpen(true);
               }}
@@ -689,7 +860,7 @@ END:VCALENDAR`;
 
           {lbOpen && (
             <Lightbox
-              images={LOCAL_AWARDS}
+              images={lbImages}
               index={lbIndex}
               onClose={() => setLbOpen(false)}
               onPrev={lbPrev}
@@ -699,7 +870,7 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* ОТЗЫВЫ */}
+      {/* ОТЗЫВЫ (лайтбокс + скелетоны) */}
       {tab === "reviews" && (
         <div className={`${MAX_W} mx-auto p-3 grid grid-cols-2 gap-3 fade-in`}>
           {reviewsLoading &&
@@ -707,14 +878,30 @@ END:VCALENDAR`;
               <div key={i} className={`${Shimmer} h-44 rounded-2xl`} />
             ))}
           {!reviewsLoading &&
-            reviews.map((r) => (
+            reviews.map((r, i) => (
               <div
                 key={r.id}
-                className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur"
+                className="rounded-2xl overflow-hidden border border-[color:var(--tg-theme-section-separator-color,#e5e7eb)] bg-white/80 dark:bg-white/5 backdrop-blur active:opacity-90"
+                onClick={() => {
+                  const imgs = reviews.map((x) => x.image_url);
+                  setLbImages(imgs);
+                  setLbIndex(i);
+                  setLbOpen(true);
+                }}
               >
                 <img src={r.image_url} alt="" className="w-full h-44 object-cover" loading="lazy" decoding="async" />
               </div>
             ))}
+
+          {lbOpen && tab === "reviews" && (
+            <Lightbox
+              images={lbImages}
+              index={lbIndex}
+              onClose={() => setLbOpen(false)}
+              onPrev={lbPrev}
+              onNext={lbNext}
+            />
+          )}
         </div>
       )}
 
