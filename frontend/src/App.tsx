@@ -215,7 +215,6 @@ function Lightbox({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [showHint, setShowHint] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const lastTapRef = useRef(0);
   const modeRef = useRef<"none" | "pan" | "pinch">("none");
@@ -224,8 +223,34 @@ function Lightbox({
   const startDistRef = useRef(1);
   const startScaleRef = useRef(1);
 
-  // 👉 гард от «мгновенного закрытия»
- const openedAtRef = useRef<number>(performance.now());
+  // ——— Гард от «мгновенного закрытия» через Pointer Events ———
+  const downOnOverlayRef = useRef(false);
+  const downAtRef = useRef<number>(0);
+  const startXYRef = useRef({ x: 0, y: 0 });
+  const movedRef = useRef(false);
+  const THRESHOLD_TIME = 700; // мс
+  const THRESHOLD_MOVE2 = 8 * 8; // 8px^2
+
+  const onOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return; // только чистый фон
+    downOnOverlayRef.current = true;
+    downAtRef.current = performance.now();
+    startXYRef.current = { x: e.clientX, y: e.clientY };
+    movedRef.current = false;
+  };
+  const onOverlayPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!downOnOverlayRef.current) return;
+    const dx = e.clientX - startXYRef.current.x;
+    const dy = e.clientY - startXYRef.current.y;
+    if (dx * dx + dy * dy > THRESHOLD_MOVE2) movedRef.current = true;
+  };
+  const onOverlayPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!downOnOverlayRef.current) return;
+    downOnOverlayRef.current = false;
+    if (e.target !== e.currentTarget) return;
+    const elapsed = performance.now() - downAtRef.current;
+    if (!movedRef.current && elapsed >= THRESHOLD_TIME) onClose();
+  };
 
   const resetZoom = useCallback(() => {
     setScale(1);
@@ -330,26 +355,22 @@ function Lightbox({
 
   const src = images[index];
 
-  // 👉 обработчик клика по фону с защитой от «первого клика»
-  const handleOverlayClick = (e: React.MouseEvent) => {
-  // закрываем ТОЛЬКО при клике по фону, не по картинке/кнопкам
-  if (e.target !== e.currentTarget) return;
-  const elapsed = performance.now() - openedAtRef.current;
-  if (elapsed < 600) return; // увеличили порог
-  onClose();
-};
-
   return (
     <div
-      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center select-none"
-      onClick={handleOverlayClick}
+      // ❗️Больше НЕТ onClick — только Pointer Events
+      onPointerDown={onOverlayPointerDown}
+      onPointerMove={onOverlayPointerMove}
+      onPointerUp={onOverlayPointerUp}
       onWheel={onWheel}
+      onContextMenu={(e) => e.preventDefault()}
       style={{ touchAction: "none" }}
     >
       <div
         className="relative"
-        onClick={(e) => e.stopPropagation()} // не пускаем клик к фону
+        onClick={(e) => e.stopPropagation()} // клики по содержимому не идут к фону
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -638,13 +659,10 @@ END:VCALENDAR`;
   };
 
   /** ======= 2) АВТО-ЗАКРЫТИЕ ЛАЙТБОКСА ПРИ СМЕНЕ ВКЛАДКИ ======= */
-  useEffect(() => {
-    if (lbOpen) {
-      setLbOpen(false);
-      setLbIndex(0);
-      // картинки можно не чистить: setLbImages([]) — необязательно
-    }
-  }, [tab, lbOpen]);
+ useEffect(() => {
+  setLbOpen(false);
+  setLbIndex(0);
+}, [tab]);
 
   /** ===== RENDER ===== */
   return (
