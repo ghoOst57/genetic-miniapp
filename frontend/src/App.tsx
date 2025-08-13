@@ -19,6 +19,14 @@ const LOCAL_AWARDS = [
   "/awards/award6.jpg",
 ];
 
+// Локальные отзывы (картинки из public/reviews/)
+const LOCAL_REVIEWS = [
+  "/reviews/review1.jpg",
+  "/reviews/review2.jpg",
+  "/reviews/review3.jpg",
+  "/reviews/review4.jpg",
+];
+
 /** ==== ТИПЫ ==== */
 type Format = "online" | "offline";
 type Slot = { id: string; start_utc: string; end_utc: string; format: Format; is_booked?: boolean };
@@ -466,17 +474,15 @@ export default function App() {
       .finally(() => setDoctorLoading(false));
   }, []);
 
-  /** Загрузка отзывов при открытии вкладки */
-  useEffect(() => {
-    if (tab === "reviews" && reviews.length === 0) {
-      setReviewsLoading(true);
-      fetch(`${API_BASE}/reviews`)
-        .then((r) => r.json())
-        .then((arr: ReviewAsset[]) => setReviews(arr))
-        .catch(() => {})
-        .finally(() => setReviewsLoading(false));
-    }
-  }, [tab, reviews.length]);
+/** Загрузка отзывов при открытии вкладки (локальные картинки) */
+useEffect(() => {
+  if (tab === "reviews" && reviews.length === 0) {
+    setReviewsLoading(true);
+    const arr = LOCAL_REVIEWS.map((src, i) => ({ id: `loc-${i}`, image_url: src }));
+    setReviews(arr);
+    setReviewsLoading(false);
+  }
+}, [tab, reviews.length]);
 
   /** Загрузка слотов за день */
   const loadDay = (iso: string, fmt: "any" | Format) => {
